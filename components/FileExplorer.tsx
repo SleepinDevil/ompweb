@@ -564,6 +564,8 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
   const rootRequestRef = useRef(0);
   const expandedPathsRef = useRef<Set<string>>(new Set());
   expandedPathsRef.current = expandedPaths;
+  const childrenByPathRef = useRef(childrenByPath);
+  childrenByPathRef.current = childrenByPath;
   const refreshToken = `${refreshKey ?? 0}:${treeRefreshKey}`;
   // Which refresh the search request has already answered; re-baselined every
   // time the panel opens.
@@ -984,6 +986,18 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
   const onRefreshDoneRef = useRef(onRefreshDone);
   onRefreshDoneRef.current = onRefreshDone;
 
+  // Whether the parent's loaded listing excludes dirPath, so no row can
+  // render it — an expanded hidden-item directory after the toggle went off,
+  // or a path below a chain that listing dropped. A parent that has not
+  // listed yet is unknown, not excluded: fetch stays eager while a chain
+  // loads. Excluded paths keep their expansion state and become fetchable
+  // again once the parent lists them (the mode flips back, or a file-index
+  // reveal turns hidden items on), so this never forgets user intent.
+  const excludedByParent = useCallback((dirPath: string) => {
+    const listing = childrenByPathRef.current.get(getFileDirectory(dirPath));
+    return listing !== undefined && !listing.some((e) => e.isDir && e.fullPath === dirPath);
+  }, []);
+
   useEffect(() => {
     const cwdChanged = prevCwdRef.current !== cwd;
     prevCwdRef.current = cwd;
@@ -1019,7 +1033,13 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
       onRefreshDoneRef.current?.();
     });
     if (!cwdChanged) {
-      for (const path of expandedPathsRef.current) fetchDir(path);
+      for (const path of expandedPathsRef.current) {
+        // Directories hidden from the tree right now (hidden items off) are
+        // not rendered, so there is nothing to refresh; they are fetched
+        // again once they become visible. Expansion state is kept.
+        if (excludedByParent(path)) continue;
+        fetchDir(path);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cwd, refreshKey, treeRefreshKey]);
@@ -1047,7 +1067,7 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
   // ancestor chain is still loading.
   useEffect(() => {
     for (const path of expandedPaths) {
-      if (!childrenByPath.has(path)) fetchDir(path);
+      if (!childrenByPath.has(path) && !excludedByParent(path)) fetchDir(path);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedPaths, childrenByPath, cwd]);
@@ -1122,8 +1142,16 @@ export const FileExplorer = forwardRef<FileExplorerHandle, Props>(function FileE
       return childrenByPath.has(ancestor)
         || childrenByPath.has(`${normalizedCwd}/${segments.slice(0, level + 1).join("/")}`);
     });
-    if (ancestorsLoaded) onRevealDone?.();
-  }, [cwd, revealPath, onRevealDone, rows, childrenByPath, goToRow]);
+    // A chain whose ancestor the current listings exclude (a hidden-item
+    // directory while the toggle is off, below its dropped parent too) can
+    // never load deeper, and the row can never render: the reveal is over.
+    const chainExcluded = segments.slice(0, -1).some((_, level) => {
+      const parts = segments.slice(0, level + 1).join("/");
+      return excludedByParent(joinFilePath(cwd, parts))
+        || excludedByParent(`${normalizedCwd}/${parts}`);
+    });
+    if (ancestorsLoaded || chainExcluded) onRevealDone?.();
+  }, [cwd, revealPath, onRevealDone, rows, childrenByPath, goToRow, excludedByParent]);
 
   const showUploadFeedback = uploadBusy || pendingConflict !== null || uploadError !== null || uploadSummary !== null;
 
