@@ -309,7 +309,8 @@ class Transport {
   private holdLifetimeLock(): void {
     const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
     if (!locks) return;
-    const name = `omp-web-event-stream:${crypto.randomUUID()}`;
+    // No crypto.randomUUID (insecure LAN origins lack it).
+    const name = `omp-web-event-stream:${Math.random().toString(36).slice(2, 12) + Date.now().toString(36)}`;
     void locks.request(name, () => {
       this.port.postMessage({ op: "lock", name });
       return new Promise<never>(() => {});

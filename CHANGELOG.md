@@ -73,6 +73,7 @@ All notable changes to **omp-web** (`@kahme247/ompweb`) are documented in this f
 
 ### Fixes & Improvements
 
+- **Opening omp-web by its LAN address no longer crashes the page.** A page loaded over `http://<lan-ip>:<port>` briefly showed the session list and then "Something went wrong". Browsers only provide `crypto.randomUUID()` over HTTPS or on localhost, and the page load, starting a new session and the browser connection's tab lock each called it unguarded. Those call sites now generate ids in a way that also works over plain HTTP. `127.0.0.1` and HTTPS were never affected.
 - **Ask forms preserve preformatted text.** Examples inside `<pre>` blocks keep their line breaks and indentation, including inside choice labels.
 - **Linked sessions survive brief reconnects.** A temporary host outage during recovery no longer closes the shared session channel. Cluster readiness no longer regresses when an older configuration reply arrives, and auth-broker readiness waits begin when its process has spawned.
 - **Retry deduplication survives long browser-offline periods.** The server keeps each session's content-free canonical retry mapping until successful session deletion; ordinary receipts and aliases retain the existing eight-day expiry, and deletion leaves pending entries and pinned GitHub receipts untouched.

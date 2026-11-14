@@ -114,6 +114,13 @@ const PROVIDER_USAGE_VISIBLE_STORAGE_KEY = "omp-web:provider-usage-visible";
 const NATIVE_SELECT_ALL_STORAGE_KEY = "omp-web:scope-native-select-all";
 const OPEN_URL_AUTOMATICALLY_STORAGE_KEY = "omp-web:open-url-automatically";
 
+/** `crypto.randomUUID` is secure-context only: plain-HTTP LAN origins have no
+ * HTTPS or localhost, so new-session ids need a fallback there. */
+function newCreationId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
 
 type AutoNameStatus =
   | { kind: "idle" }
@@ -1164,7 +1171,7 @@ export function AppShell({ appName }: { appName: string }) {
       if (selectedSession?.poolId === project.poolId && selectedSession.projectId === project.projectId) return;
       if (newSessionPoolProject?.poolId === project.poolId && newSessionPoolProject.projectId === project.projectId) return;
       setNewSessionPoolProject(project);
-      setNewSessionCreation({ id: crypto.randomUUID() });
+      setNewSessionCreation({ id: newCreationId() });
       setNewSessionCwd(null);
       setNewSessionHostId(undefined);
       setSelectedSession(null);
@@ -1204,7 +1211,7 @@ export function AppShell({ appName }: { appName: string }) {
       return prev;
     });
     setNewSessionHostId(remoteHostId(hostId));
-    setNewSessionCreation({ id: crypto.randomUUID() });
+    setNewSessionCreation({ id: newCreationId() });
     setSessionKey((k) => k + 1);
     setBranchTree([]);
     setBranchActiveLeafId(null);
@@ -1251,7 +1258,7 @@ export function AppShell({ appName }: { appName: string }) {
     setSettingsTab(null);
     setSelectedSession(null);
     const target = project ?? (cwd === activeCwd ? activePoolProject : null);
-    setNewSessionCreation({ id: creationId || crypto.randomUUID(), initialization });
+    setNewSessionCreation({ id: creationId || newCreationId(), initialization });
     setNewSessionPoolProject(target?.poolId ? target : null);
     setNewSessionCwd(target?.poolId ? null : cwd);
     setNewSessionHostId(target?.poolId ? undefined : remoteHostId(hostId));
@@ -1324,7 +1331,7 @@ export function AppShell({ appName }: { appName: string }) {
         else navigationHistory.commitForward();
         const project = entry.poolId ? workspaceOptions.projects.find((candidate) => candidate.poolId === entry.poolId && candidate.projectId === entry.projectId) : undefined;
         if (entry.poolId && !project) { toast.error(translate("errors.generic")); return; }
-        handleNewSession(entry.creationId ?? crypto.randomUUID(), entry.cwd, entry.hostId, project, entry.initialization);
+        handleNewSession(entry.creationId ?? newCreationId(), entry.cwd, entry.hostId, project, entry.initialization);
         return;
       }
       const versionAtPress = navViewVersionRef.current;
@@ -1367,7 +1374,7 @@ export function AppShell({ appName }: { appName: string }) {
 
   // Global keyboard shortcuts (handles Esc, Ctrl+Alt+N etc.)
   useGlobalKeyboardShortcuts({
-    onNewSession: (cwd: string) => handleNewSession(crypto.randomUUID(), activePoolProject ? null : cwd, activeHostId, activePoolProject ?? undefined),
+    onNewSession: (cwd: string) => handleNewSession(newCreationId(), activePoolProject ? null : cwd, activeHostId, activePoolProject ?? undefined),
     onNavigateBack: handleNavigateBack,
     onNavigateForward: handleNavigateForward,
     activeCwd: activePoolProject ? projectIdentity(activePoolProject) : activeCwd,
@@ -1512,7 +1519,7 @@ export function AppShell({ appName }: { appName: string }) {
       const cwd = selectedSession.cwd;
       setSelectedSession(null);
       setNewSessionCwd(selectedSession.poolId ? null : cwd ?? null);
-      setNewSessionCreation({ id: crypto.randomUUID() });
+      setNewSessionCreation({ id: newCreationId() });
       setNewSessionPoolProject(selectedSession.poolId ? workspaceOptions.projects.find((project) => project.poolId === selectedSession.poolId && project.projectId === selectedSession.projectId) ?? null : null);
       setNewSessionHostId(remoteHostId(selectedSession.hostId));
       setSessionKey((k) => k + 1);
@@ -1982,7 +1989,7 @@ export function AppShell({ appName }: { appName: string }) {
           // useAgentSession refuses to start — every send a silent no-op.
           // Fall back to the server's default cwd (~/omp-cwd-<date>) instead.
           if (activeCwd || activePoolProject) {
-            handleNewSession(crypto.randomUUID(), activeCwd, activeHostId, activePoolProject ?? undefined);
+            handleNewSession(newCreationId(), activeCwd, activeHostId, activePoolProject ?? undefined);
             return;
           }
           const targetHost = currentHostId ?? LOCAL_HOST_ID;
@@ -1996,7 +2003,7 @@ export function AppShell({ appName }: { appName: string }) {
             })
             .then((data) => {
               if (!data.cwd) throw new Error("Empty cwd returned");
-              if (navViewVersionRef.current === sourceVersion) handleNewSession(crypto.randomUUID(), data.cwd, targetHost);
+              if (navViewVersionRef.current === sourceVersion) handleNewSession(newCreationId(), data.cwd, targetHost);
             })
             .catch(() => toast.error(translate("errors.generic")));
         }}
@@ -2577,7 +2584,7 @@ export function AppShell({ appName }: { appName: string }) {
                             setActivePoolProject(first.poolId ? first : null);
                             setActiveCwd(first.poolId ? null : first.path);
                             setActiveHostId(first.poolId ? undefined : remoteHostId(first.hostId));
-                            handleNewSession(crypto.randomUUID(), first.poolId ? null : first.path, first.hostId, first);
+                            handleNewSession(newCreationId(), first.poolId ? null : first.path, first.hostId, first);
                           }}
                           options={creationTargets.map((target) => ({
                             value: target.id,
@@ -2609,7 +2616,7 @@ export function AppShell({ appName }: { appName: string }) {
                         setActivePoolProject(project.poolId ? project : null);
                         setActiveCwd(project.poolId ? null : project.path);
                         setActiveHostId(project.poolId ? undefined : remoteHostId(project.hostId));
-                        handleNewSession(crypto.randomUUID(), project.poolId ? null : project.path, project.hostId, project);
+                        handleNewSession(newCreationId(), project.poolId ? null : project.path, project.hostId, project);
                       }}
                       options={[
                         ...(!effectivePoolProject && effectiveNewSessionCwd && !hostProjects.some((project) => foldedHostProjectKey(project.hostId, project.path) === foldedHostProjectKey(newSessionHost, newSessionProject))
